@@ -13,10 +13,13 @@ import java.util.NoSuchElementException;
  */
 public class TupleDesc implements Serializable {
 
+    //存储表头的属性内容
     private List<TDItem> tdItems = new ArrayList<>();
 
     /**
      * A help class to facilitate organizing the information of each field
+     * <p>
+     * 属性
      */
     public static class TDItem implements Serializable {
 
@@ -37,6 +40,7 @@ public class TupleDesc implements Serializable {
             this.fieldType = t;
         }
 
+        @Override
         public String toString() {
             return fieldName + "(" + fieldType + ")";
         }
@@ -45,6 +49,8 @@ public class TupleDesc implements Serializable {
     /**
      * @return An iterator which iterates over all the field TDItems
      * that are included in this TupleDesc
+     *
+     * 返回列表的迭代器，供遍历表头TupleDesc属性
      */
     public Iterator<TDItem> iterator() {
         // some code goes here
@@ -61,6 +67,8 @@ public class TupleDesc implements Serializable {
      *                TupleDesc. It must contain at least one entry.
      * @param fieldAr array specifying the names of the fields. Note that names may
      *                be null.
+     *
+     * 根据类型Type、field名建立表头TupleDesc
      */
     public TupleDesc(Type[] typeAr, String[] fieldAr) {
         // some code goes here
@@ -87,6 +95,8 @@ public class TupleDesc implements Serializable {
 
     /**
      * @return the number of fields in this TupleDesc
+     *
+     * 返回表头TupleDesc属性数量
      */
     public int numFields() {
         // some code goes here
@@ -99,6 +109,8 @@ public class TupleDesc implements Serializable {
      * @param i index of the field name to return. It must be a valid index.
      * @return the name of the ith field
      * @throws NoSuchElementException if i is not a valid field reference.
+     *
+     * 获取表头第i个属性的名字
      */
     public String getFieldName(int i) throws NoSuchElementException {
         // some code goes here
@@ -115,6 +127,8 @@ public class TupleDesc implements Serializable {
      *          index.
      * @return the type of the ith field
      * @throws NoSuchElementException if i is not a valid field reference.
+     *
+     * 获取表头第i个属性的类型
      */
     public Type getFieldType(int i) throws NoSuchElementException {
         // some code goes here
@@ -130,10 +144,14 @@ public class TupleDesc implements Serializable {
      * @param name name of the field.
      * @return the index of the field that is first to have the given name.
      * @throws NoSuchElementException if no field with a matching name is found.
+     *
+     * 返回属性的在表头TupleDesc中的下标
      */
     public int fieldNameToIndex(String name) throws NoSuchElementException {
         // some code goes here
-        if (name == null) throw new NoSuchElementException("无法找到该属性");
+        if (name == null) {
+            throw new NoSuchElementException("无法找到该属性");
+        }
         for (int i = 0; i < this.tdItems.size(); i++) {
             TDItem tdItem = this.tdItems.get(i);
             if (name.equals(tdItem.fieldName)) {
@@ -146,6 +164,8 @@ public class TupleDesc implements Serializable {
     /**
      * @return The size (in bytes) of tuples corresponding to this TupleDesc.
      * Note that tuples from a given TupleDesc are of a fixed size.
+     *
+     * 获取表头所有Field的大小：Int 4字节、String 128字节
      */
     public int getSize() {
         // some code goes here
@@ -163,6 +183,8 @@ public class TupleDesc implements Serializable {
      * @param td1 The TupleDesc with the first fields of the new TupleDesc
      * @param td2 The TupleDesc with the last fields of the TupleDesc
      * @return the new TupleDesc
+     *
+     * 合并两个表头TupleDesc的属性 -> 构建新的表头TupleDesc
      */
     public static TupleDesc merge(TupleDesc td1, TupleDesc td2) {
         // some code goes here
@@ -189,8 +211,11 @@ public class TupleDesc implements Serializable {
      *
      * @param o the Object to be compared for equality with this TupleDesc.
      * @return true if the object is equal to this TupleDesc.
+     *
+     * 根据表头属性数量、属性值来判断是否相等
      */
 
+    @Override
     public boolean equals(Object o) {
         // some code goes here
         if (this.getClass().isInstance(o)) {
@@ -206,6 +231,7 @@ public class TupleDesc implements Serializable {
         return false;
     }
 
+    @Override
     public int hashCode() {
         // If you want to use TupleDesc as keys for HashMap, implement this so
         // that equal objects have equals hashCode() results

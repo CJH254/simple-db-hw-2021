@@ -1,6 +1,7 @@
 package simpledb.storage;
 
-/** Unique identifier for HeapPage objects. */
+/** Unique identifier for HeapPage objects.
+ * HeapPageId通过tableId和pgNo来标识一个HeapPage； */
 public class HeapPageId implements PageId {
 
     private final int tableId;
@@ -14,7 +15,9 @@ public class HeapPageId implements PageId {
      */
     public HeapPageId(int tableId, int pgNo) {
         // some code goes here
+        //该Page属于哪一个Table
         this.tableId = tableId;
+        //该Page在File中的位置号
         this.pgNo = pgNo;
     }
 

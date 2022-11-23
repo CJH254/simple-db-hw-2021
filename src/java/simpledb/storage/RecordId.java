@@ -9,8 +9,11 @@ import java.io.Serializable;
 public class RecordId implements Serializable {
 
     private static final long serialVersionUID = 1L;
+    // 该元组Tuple属于哪一个Page
     private final PageId pid;
+    // 该元组Tuple在Page里的number
     private final int tupleno;
+    
     /**
      * Creates a new RecordId referring to the specified PageId and tuple
      * number.
@@ -69,7 +72,7 @@ public class RecordId implements Serializable {
     @Override
     public int hashCode() {
         // some code goes here
-        String hash = "" + pid.getTableId()+pid.getPageNumber() + tupleno;
+        String hash = "" + pid.getTableId() + pid.getPageNumber() + tupleno;
         return hash.hashCode();
 
     }

@@ -8,7 +8,10 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -20,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * @Threadsafe
  */
+//Catalog「数据库目录」 -> Table「数据表」= DbFile -> heapPage -> Tuple -> TupleDesc
 public class Catalog {
 
     //MVCC后续
@@ -50,6 +54,7 @@ public class Catalog {
             return pkField;
         }
 
+        @Override
         public String toString() {
             return tableName + "(" + dbFile.getId() + ":" + pkField + ")";
         }
@@ -122,6 +127,8 @@ public class Catalog {
      * @param tableid The id of the table, as specified by the DbFile.getId()
      *                function passed to addTable
      * @throws NoSuchElementException if the table doesn't exist
+     *
+     * 获取该Table的表头信息
      */
     public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
         // some code goes here
@@ -202,18 +209,18 @@ public class Catalog {
                 for (String e : els) {
                     String[] els2 = e.trim().split(" ");
                     names.add(els2[0].trim());
-                    if (els2[1].trim().equalsIgnoreCase("int"))
+                    if (els2[1].trim().equalsIgnoreCase("int")) {
                         types.add(Type.INT_TYPE);
-                    else if (els2[1].trim().equalsIgnoreCase("string"))
+                    } else if (els2[1].trim().equalsIgnoreCase("string")) {
                         types.add(Type.STRING_TYPE);
-                    else {
+                    } else {
                         System.out.println("Unknown type " + els2[1]);
                         System.exit(0);
                     }
                     if (els2.length == 3) {
-                        if (els2[2].trim().equals("pk"))
+                        if (els2[2].trim().equals("pk")) {
                             primaryKey = els2[0].trim();
-                        else {
+                        } else {
                             System.out.println("Unknown annotation " + els2[2]);
                             System.exit(0);
                         }

@@ -2,7 +2,6 @@ package simpledb.storage;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
@@ -21,11 +20,11 @@ public class Tuple implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    //行记录的类型
+    // 该元组的描述信息
     private TupleDesc tupleDesc;
-    //行ID
+    // 该元组的id
     private RecordId recordId;
-    //每一行都存在相应的属性值
+    // 该元组的所有字段
     private List<Field> fields;
 
     /**
@@ -72,6 +71,8 @@ public class Tuple implements Serializable {
      *
      * @param i index of the field to change. It must be a valid index.
      * @param f new value for the field.
+     *
+     * 设置某字段的值
      */
     public void setField(int i, Field f) {
         // some code goes here
@@ -107,9 +108,10 @@ public class Tuple implements Serializable {
                 '}';
     }
 
-
     /**
      * @return An iterator which iterates over all the fields of this tuple
+     *
+     * 返回该元组的具体字段
      */
     public Iterator<Field> fields() {
         // some code goes here
@@ -118,6 +120,8 @@ public class Tuple implements Serializable {
 
     /**
      * reset the TupleDesc of this tuple (only affecting the TupleDesc)
+     * <p>
+     * 更换表头TupleDesc
      */
     public void resetTupleDesc(TupleDesc td) {
         // some code goes here

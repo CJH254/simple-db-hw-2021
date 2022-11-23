@@ -2,13 +2,17 @@ package simpledb.storage;
 
 import simpledb.common.Database;
 import simpledb.common.DbException;
-import simpledb.common.Debug;
 import simpledb.common.Permissions;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
-import java.io.*;
-import java.util.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
 
 /**
  * HeapFile is an implementation of a DbFile that stores a collection of tuples
@@ -56,6 +60,7 @@ public class HeapFile implements DbFile {
      *
      * @return an ID uniquely identifying this HeapFile.
      */
+    @Override
     public int getId() {
         // some code goes here
         return this.file.getAbsoluteFile().hashCode();
@@ -66,12 +71,15 @@ public class HeapFile implements DbFile {
      *
      * @return TupleDesc of this DbFile.
      */
+    @Override
     public TupleDesc getTupleDesc() {
         // some code goes here
         return this.td;
     }
 
     // see DbFile.java for javadocs
+    // File获取根据pgNum和tableId等信息获取Page，要File自己去读取相应坐标的Page
+    @Override
     public Page readPage(PageId pid) {
         // some code goes here
         int tableId = pid.getTableId();
@@ -85,6 +93,7 @@ public class HeapFile implements DbFile {
                 throw new IllegalArgumentException(String.format("table %d page %d is invalid", tableId, pgNo));
             }
             byte[] bytes = new byte[BufferPool.getPageSize()];
+            //将锚点移动指定偏移量再进行下一步的读取
             f.seek(pgNo * BufferPool.getPageSize());
             // big end
             int read = f.read(bytes, 0, BufferPool.getPageSize());
@@ -92,7 +101,8 @@ public class HeapFile implements DbFile {
                 throw new IllegalArgumentException(String.format("table %d page %d read %d bytes", tableId, pgNo, read));
             }
             HeapPageId id = new HeapPageId(pid.getTableId(), pid.getPageNumber());
-            return new HeapPage(id, bytes);
+            HeapPage heapPage = new HeapPage(id, bytes);
+            return heapPage;
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
@@ -106,6 +116,7 @@ public class HeapFile implements DbFile {
     }
 
     // see DbFile.java for javadocs
+    @Override
     public void writePage(Page page) throws IOException {
         // some code goes here
         // not necessary for lab1
@@ -113,6 +124,8 @@ public class HeapFile implements DbFile {
 
     /**
      * Returns the number of pages in this HeapFile.
+     * <p>
+     * File的大小 / 每页Page4KB = 页的数量
      */
     public int numPages() {
         // some code goes here
@@ -121,22 +134,23 @@ public class HeapFile implements DbFile {
     }
 
     // see DbFile.java for javadocs
-    public List<Page> insertTuple(TransactionId tid, Tuple t)
-            throws DbException, IOException, TransactionAbortedException {
+    @Override
+    public List<Page> insertTuple(TransactionId tid, Tuple t) throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         return null;
         // not necessary for lab1
     }
 
     // see DbFile.java for javadocs
-    public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
-            TransactionAbortedException {
+    @Override
+    public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException, TransactionAbortedException {
         // some code goes here
         return null;
         // not necessary for lab1
     }
 
     // see DbFile.java for javadocs
+    @Override
     public DbFileIterator iterator(TransactionId tid) {
         // some code goes here
         return new HeapFileIterator(this, tid);
@@ -154,6 +168,7 @@ public class HeapFile implements DbFile {
             this.tid = tid;
         }
 
+        // open的行为主要是初始化迭代器里的数据
         @Override
         public void open() throws DbException, TransactionAbortedException {
             // TODO Auto-generated method stub
@@ -161,6 +176,7 @@ public class HeapFile implements DbFile {
             it = getPageTuples(whichPage);
         }
 
+        // 获取Page里所有的Tuple
         private Iterator<Tuple> getPageTuples(int pageNumber) throws TransactionAbortedException, DbException {
             if (pageNumber >= 0 && pageNumber < heapFile.numPages()) {
                 HeapPageId pid = new HeapPageId(heapFile.getId(), pageNumber);

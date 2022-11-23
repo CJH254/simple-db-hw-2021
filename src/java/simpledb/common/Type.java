@@ -1,11 +1,13 @@
 package simpledb.common;
 
-import simpledb.storage.StringField;
 import simpledb.storage.Field;
 import simpledb.storage.IntField;
+import simpledb.storage.StringField;
 
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.io.Serializable;
 import java.text.ParseException;
-import java.io.*;
 
 /**
  * Class representing a type in SimpleDB.
@@ -31,7 +33,7 @@ public enum Type implements Serializable {
     }, STRING_TYPE() {
         @Override
         public int getLen() {
-            return STRING_LEN+4;
+            return STRING_LEN + 4;
         }
 
         @Override
