@@ -27,47 +27,59 @@ public class Predicate implements Serializable {
             return values()[i];
         }
 
+        @Override
         public String toString() {
-            if (this == EQUALS)
+            if (this == EQUALS) {
                 return "=";
-            if (this == GREATER_THAN)
+            }
+            if (this == GREATER_THAN) {
                 return ">";
-            if (this == LESS_THAN)
+            }
+            if (this == LESS_THAN) {
                 return "<";
-            if (this == LESS_THAN_OR_EQ)
+            }
+            if (this == LESS_THAN_OR_EQ) {
                 return "<=";
-            if (this == GREATER_THAN_OR_EQ)
+            }
+            if (this == GREATER_THAN_OR_EQ) {
                 return ">=";
-            if (this == LIKE)
+            }
+            if (this == LIKE) {
                 return "LIKE";
-            if (this == NOT_EQUALS)
+            }
+            if (this == NOT_EQUALS) {
                 return "<>";
+            }
             throw new IllegalStateException("impossible to reach here");
         }
 
     }
-    
+
+    private int fieldNo;
+    private Op op;
+    private Field operand;
+
     /**
      * Constructor.
-     * 
-     * @param field
-     *            field number of passed in tuples to compare against.
-     * @param op
-     *            operation to use for comparison
-     * @param operand
-     *            field value to compare passed in tuples to
+     *
+     * @param field   field number of passed in tuples to compare against.
+     * @param op      operation to use for comparison
+     * @param operand field value to compare passed in tuples to
      */
     public Predicate(int field, Op op, Field operand) {
         // some code goes here
+        this.fieldNo = field;
+        this.op = op;
+        this.operand = operand;
     }
+
 
     /**
      * @return the field number
      */
-    public int getField()
-    {
+    public int getFieldNo() {
         // some code goes here
-        return -1;
+        return this.fieldNo;
     }
 
     /**
@@ -76,7 +88,7 @@ public class Predicate implements Serializable {
     public Op getOp()
     {
         // some code goes here
-        return null;
+        return this.op;
     }
     
     /**
@@ -85,30 +97,34 @@ public class Predicate implements Serializable {
     public Field getOperand()
     {
         // some code goes here
-        return null;
+        return this.operand;
     }
-    
+
     /**
      * Compares the field number of t specified in the constructor to the
      * operand field specified in the constructor using the operator specific in
      * the constructor. The comparison can be made through Field's compare
      * method.
-     * 
-     * @param t
-     *            The tuple to compare against
+     *
+     * @param t The tuple to compare against
      * @return true if the comparison is true, false otherwise.
+     * <p>
+     * 获取元组的第fieldNo个字段的值，用op操作符与operand操作数进行比较
      */
     public boolean filter(Tuple t) {
         // some code goes here
-        return false;
+        Field field = t.getField(this.fieldNo);
+        return field.compare(this.op, this.operand);
     }
 
     /**
      * Returns something useful, like "f = field_id op = op_string operand =
      * operand_string"
      */
+    @Override
     public String toString() {
         // some code goes here
-        return "";
+        String s = String.format("f = %d op = %s operand = %s", this.fieldNo, this.op.toString(), this.operand.toString());
+        return s;
     }
 }

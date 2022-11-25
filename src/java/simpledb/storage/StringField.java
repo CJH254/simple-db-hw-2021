@@ -3,7 +3,8 @@ package simpledb.storage;
 import simpledb.common.Type;
 import simpledb.execution.Predicate;
 
-import java.io.*;
+import java.io.DataOutputStream;
+import java.io.IOException;
 
 /**
  * Instance of Field that stores a single String of a fixed length.
@@ -16,7 +17,7 @@ public class StringField implements Field {
 	private final int maxSize;
 
 	public String getValue() {
-		return value;
+		return this.value;
 	}
 
 	/**
@@ -30,23 +31,29 @@ public class StringField implements Field {
 	public StringField(String s, int maxSize) {
 		this.maxSize = maxSize;
 
-		if (s.length() > maxSize)
-			value = s.substring(0, maxSize);
-		else
-			value = s;
+		if (s.length() > maxSize) {
+			this.value = s.substring(0, maxSize);
+		} else {
+			this.value = s;
+		}
 	}
 
+	@Override
 	public String toString() {
-		return value;
+		return this.value;
 	}
 
+	@Override
 	public int hashCode() {
-		return value.hashCode();
+		return this.value.hashCode();
 	}
 
+	@Override
 	public boolean equals(Object field) {
-	    if (!(field instanceof StringField)) return false;
-		return ((StringField) field).value.equals(value);
+	    if (!(field instanceof StringField)) {
+			return false;
+		}
+		return ((StringField) field).value.equals(this.value);
 	}
 
 	/**
@@ -57,30 +64,32 @@ public class StringField implements Field {
 	 * @param dos
 	 *            Where the string is written
 	 */
+	@Override
 	public void serialize(DataOutputStream dos) throws IOException {
-		String s = value;
-		int overflow = maxSize - s.length();
+		String s = this.value;
+		int overflow = this.maxSize - s.length();
 		if (overflow < 0) {
-            s = s.substring(0, maxSize);
+            s = s.substring(0, this.maxSize);
 		}
 		dos.writeInt(s.length());
 		dos.writeBytes(s);
-		while (overflow-- > 0)
+		while (overflow-- > 0) {
 			dos.write((byte) 0);
+		}
 	}
 
 	/**
 	 * Compare the specified field to the value of this Field. Return semantics
 	 * are as specified by Field.compare
 	 * 
-	 * @throws IllegalCastException
 	 *             if val is not a StringField
 	 * @see Field#compare
 	 */
+	@Override
 	public boolean compare(Predicate.Op op, Field val) {
 
 		StringField iVal = (StringField) val;
-		int cmpVal = value.compareTo(iVal.value);
+		int cmpVal = this.value.compareTo(iVal.value);
 
 		switch (op) {
 		case EQUALS:
@@ -102,7 +111,7 @@ public class StringField implements Field {
 			return cmpVal <= 0;
 
 		case LIKE:
-			return value.contains(iVal.value);
+			return this.value.contains(iVal.value);
 		}
 
 		return false;
@@ -111,6 +120,7 @@ public class StringField implements Field {
 	/**
 	 * @return the Type for this Field
 	 */
+	@Override
 	public Type getType() {
 
 		return Type.STRING_TYPE;
