@@ -13,8 +13,9 @@ import java.util.NoSuchElementException;
 public class Filter extends Operator {
 
     private static final long serialVersionUID = 1L;
-
+    // 通过Predicate接口接受单向或双向比较操作
     private final Predicate p;
+    // 通过迭代器遍历筛选出符合Predicate数据
     private OpIterator child;
 
     /**

@@ -1,9 +1,9 @@
 package simpledb.execution;
 
-import simpledb.transaction.TransactionAbortedException;
 import simpledb.common.DbException;
 import simpledb.storage.Tuple;
 import simpledb.storage.TupleDesc;
+import simpledb.transaction.TransactionAbortedException;
 
 import java.util.NoSuchElementException;
 
@@ -16,25 +16,31 @@ public abstract class Operator implements OpIterator {
 
     private static final long serialVersionUID = 1L;
 
+    //hasNext是通过fetchNext去判断的，然后再进行next
+    @Override
     public boolean hasNext() throws DbException, TransactionAbortedException {
-        if (!this.open)
+        if (!this.open) {
             throw new IllegalStateException("Operator not yet open");
+        }
         
-        if (next == null)
-            next = fetchNext();
-        return next != null;
+        if (this.next == null) {
+            this.next = fetchNext();
+        }
+        return this.next != null;
     }
 
+    @Override
     public Tuple next() throws DbException, TransactionAbortedException,
             NoSuchElementException {
-        if (next == null) {
-            next = fetchNext();
-            if (next == null)
+        if (this.next == null) {
+            this.next = fetchNext();
+            if (this.next == null) {
                 throw new NoSuchElementException();
+            }
         }
 
-        Tuple result = next;
-        next = null;
+        Tuple result = this.next;
+        this.next = null;
         return result;
     }
 
@@ -53,9 +59,10 @@ public abstract class Operator implements OpIterator {
      * Closes this iterator. If overridden by a subclass, they should call
      * super.close() in order for Operator's internal state to be consistent.
      */
+    @Override
     public void close() {
         // Ensures that a future call to next() will fail
-        next = null;
+        this.next = null;
         this.open = false;
     }
 
@@ -63,6 +70,7 @@ public abstract class Operator implements OpIterator {
     private boolean open = false;
     private int estimatedCardinality = 0;
 
+    @Override
     public void open() throws DbException, TransactionAbortedException {
         this.open = true;
     }
@@ -90,6 +98,7 @@ public abstract class Operator implements OpIterator {
     /**
      * @return return the TupleDesc of the output tuples of this operator
      * */
+    @Override
     public abstract TupleDesc getTupleDesc();
 
     /**
