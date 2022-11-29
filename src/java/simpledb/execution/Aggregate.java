@@ -19,20 +19,22 @@ import java.util.NoSuchElementException;
 public class Aggregate extends Operator {
 
     private static final long serialVersionUID = 1L;
-    // 需要聚合的tuples
+
+    // 需要聚合的 tuples
     private OpIterator child;
-    // 待聚合字段的序号
-    private int aField;
-    // 分组字段的序号
-    private int gField;
+    // 聚合字段
+    private final int afield;
+    // 分组字段
+    private final int gfield;
     // 运算符
     private Aggregator.Op aop;
+
     // 进行聚合操作的类
     private Aggregator aggregator;
     // 聚合结果的迭代器
-    private OpIterator it;
+    private OpIterator opIterator;
     // 聚合结果的属性行
-    private TupleDesc td;
+    private TupleDesc tupleDesc;
 
 
     /**
@@ -43,51 +45,54 @@ public class Aggregate extends Operator {
      * you with your implementation of readNext().
      *
      * @param child  The OpIterator that is feeding us tuples.
-     * @param aField The column over which we are computing an aggregate.
-     * @param gField The column over which we are grouping the result, or -1 if
+     * @param afield The column over which we are computing an aggregate.
+     * @param gfield The column over which we are grouping the result, or -1 if
      *               there is no grouping
      * @param aop    The aggregation operator to use
      */
-    public Aggregate(OpIterator child, int aField, int gField, Aggregator.Op aop) {
+    public Aggregate(OpIterator child, int afield, int gfield, Aggregator.Op aop) {
         // some code goes here
         this.child = child;
-        this.aField = aField;
-        this.gField = gField;
+        this.afield = afield;
+        this.gfield = gfield;
         this.aop = aop;
+        // 判断是否分组
+        Type gfieldtype = gfield == -1 ? null : child.getTupleDesc().getFieldType(gfield);
 
-        Type gFieldType = gField == -1 ? null : this.child.getTupleDesc().getFieldType(this.gField);
-
-        if (this.child.getTupleDesc().getFieldType(this.aField) == (Type.STRING_TYPE)) {
-            this.aggregator = new StringAggregator(this.gField, gFieldType, this.aField, this.aop);
+        // 创建聚合器
+        if (child.getTupleDesc().getFieldType(afield) == Type.STRING_TYPE) {
+            this.aggregator = new StringAggregator(gfield, gfieldtype, afield, aop);
         } else {
-            this.aggregator = new IntegerAggregator(this.gField, gFieldType, this.aField, this.aop);
+            this.aggregator = new IntegerAggregator(gfield, gfieldtype, afield, aop);
         }
-        this.it = this.aggregator.iterator();
-        List<Type> types = new ArrayList<>();
-        List<String> names = new ArrayList<>();
-        if (gFieldType != null) {
-            types.add(gFieldType);
-            names.add(this.child.getTupleDesc().getFieldName(this.gField));
-        }
-        types.add(this.child.getTupleDesc().getFieldType(this.aField));
-        names.add(this.child.getTupleDesc().getFieldName(this.aField));
-        if (aop.equals(Aggregator.Op.SUM_COUNT)) {
-            types.add(Type.INT_TYPE);
-            names.add("COUNT");
-        }
-        assert (types.size() == names.size());
-        this.td = new TupleDesc(types.toArray(new Type[types.size()]), names.toArray(new String[names.size()]));
-    }
 
+        // 组建 TupleDesc
+        List<Type> typeList = new ArrayList<>();
+        List<String> nameList = new ArrayList<>();
+
+        if (gfieldtype != null) {
+            typeList.add(gfieldtype);
+            nameList.add(child.getTupleDesc().getFieldName(gfield));
+        }
+
+        typeList.add(child.getTupleDesc().getFieldType(afield));
+        nameList.add(child.getTupleDesc().getFieldName(afield));
+
+        if (aop.equals(Aggregator.Op.SUM_COUNT)) {
+            typeList.add(Type.INT_TYPE);
+            nameList.add("COUNT");
+        }
+        this.tupleDesc = new TupleDesc(typeList.toArray(new Type[typeList.size()]), nameList.toArray(new String[nameList.size()]));
+    }
 
     /**
      * @return If this aggregate is accompanied by a groupby, return the groupby
      * field index in the <b>INPUT</b> tuples. If not, return
-     * {@link simpledb.Aggregator#NO_GROUPING}
+     * {@link Aggregator#NO_GROUPING}
      */
     public int groupField() {
         // some code goes here
-        return this.gField;
+        return this.gfield;
     }
 
     /**
@@ -97,7 +102,8 @@ public class Aggregate extends Operator {
      */
     public String groupFieldName() {
         // some code goes here
-        return this.td.getFieldName(0);
+
+        return this.child.getTupleDesc().getFieldName(this.gfield);
     }
 
     /**
@@ -105,7 +111,7 @@ public class Aggregate extends Operator {
      */
     public int aggregateField() {
         // some code goes here
-        return this.aField;
+        return this.afield;
     }
 
     /**
@@ -114,11 +120,10 @@ public class Aggregate extends Operator {
      */
     public String aggregateFieldName() {
         // some code goes here
-        if (this.gField == -1) {
-            return this.td.getFieldName(0);
-        } else {
-            return this.td.getFieldName(1);
+        if (this.gfield == -1) {
+            return this.tupleDesc.getFieldName(0);
         }
+        return this.tupleDesc.getFieldName(1);
     }
 
     /**
@@ -137,11 +142,16 @@ public class Aggregate extends Operator {
     public void open() throws NoSuchElementException, DbException,
             TransactionAbortedException {
         // some code goes here
+        // 聚合所有的tuple
         this.child.open();
         while (this.child.hasNext()) {
             this.aggregator.mergeTupleIntoGroup(this.child.next());
         }
-        this.it.open();
+        // 获取聚合后的迭代器
+        this.opIterator = this.aggregator.iterator();
+        // 查询
+        this.opIterator.open();
+        // 使父类状态保持一致
         super.open();
     }
 
@@ -155,8 +165,8 @@ public class Aggregate extends Operator {
     @Override
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
-        while (this.it.hasNext()) {
-            return this.it.next();
+        if (this.opIterator.hasNext()) {
+            return this.opIterator.next();
         }
         return null;
     }
@@ -165,7 +175,7 @@ public class Aggregate extends Operator {
     public void rewind() throws DbException, TransactionAbortedException {
         // some code goes here
         this.child.rewind();
-        this.it.rewind();
+        this.opIterator.rewind();
     }
 
     /**
@@ -173,7 +183,7 @@ public class Aggregate extends Operator {
      * this will have one field - the aggregate column. If there is a group by
      * field, the first field will be the group by field, and the second will be
      * the aggregate value column.
-     *
+     * <p>
      * The name of an aggregate column should be informative. For example:
      * "aggName(aop) (child_td.getFieldName(afield))" where aop and afield are
      * given in the constructor, and child_td is the TupleDesc of the child
@@ -182,7 +192,7 @@ public class Aggregate extends Operator {
     @Override
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return this.td;
+        return this.tupleDesc;
     }
 
     @Override
@@ -190,7 +200,7 @@ public class Aggregate extends Operator {
         // some code goes here
         super.close();
         this.child.close();
-        this.it.close();
+        this.opIterator.close();
     }
 
     @Override
@@ -203,20 +213,27 @@ public class Aggregate extends Operator {
     public void setChildren(OpIterator[] children) {
         // some code goes here
         this.child = children[0];
-        List<Type> types = new ArrayList<>();
-        List<String> names = new ArrayList<>();
-        Type gFieldType = this.gField == -1 ? null : this.child.getTupleDesc().getFieldType(this.gField);
-        if (gFieldType != null) {
-            types.add(gFieldType);
-            names.add(this.child.getTupleDesc().getFieldName(this.gField));
+        Type gfieldtype = this.child.getTupleDesc().getFieldType(this.gfield);
+
+        // 组建 TupleDesc
+        List<Type> typeList = new ArrayList<>();
+        List<String> nameList = new ArrayList<>();
+
+        // 加入分组后的字段
+        if (gfieldtype != null) {
+            typeList.add(gfieldtype);
+            nameList.add(this.child.getTupleDesc().getFieldName(this.gfield));
         }
-        types.add(this.child.getTupleDesc().getFieldType(this.aField));
-        names.add(this.child.getTupleDesc().getFieldName(this.aField));
+
+        // 加入聚合字段
+        typeList.add(this.child.getTupleDesc().getFieldType(this.afield));
+        nameList.add(this.child.getTupleDesc().getFieldName(this.afield));
+
         if (this.aop.equals(Aggregator.Op.SUM_COUNT)) {
-            types.add(Type.INT_TYPE);
-            names.add("COUNT");
+            typeList.add(Type.INT_TYPE);
+            nameList.add("COUNT");
         }
-        assert (types.size() == names.size());
-        this.td = new TupleDesc(types.toArray(new Type[types.size()]), names.toArray(new String[names.size()]));
+
+        this.tupleDesc = new TupleDesc(typeList.toArray(new Type[typeList.size()]), nameList.toArray(new String[nameList.size()]));
     }
 }

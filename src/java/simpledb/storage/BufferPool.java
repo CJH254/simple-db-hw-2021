@@ -1,14 +1,13 @@
 package simpledb.storage;
 
 import simpledb.common.Database;
-import simpledb.common.Permissions;
 import simpledb.common.DbException;
-import simpledb.common.DeadlockException;
+import simpledb.common.Permissions;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
-import java.io.*;
-
+import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -37,8 +36,53 @@ public class BufferPool {
      */
     public static final int DEFAULT_PAGES = 50;
 
+    // 页面的最大数量
     private final int numPages;
-    private final ConcurrentHashMap<Integer, Page> pageStore;
+    // 储存的页面
+    // key 为 PageId
+    private final ConcurrentHashMap<PageId, LinkedNode> pageStore;
+
+    // 页面的访问顺序
+    private static class LinkedNode {
+        PageId pageId;
+        Page page;
+        LinkedNode prev;
+        LinkedNode next;
+
+        public LinkedNode(PageId pageId, Page page) {
+            this.pageId = pageId;
+            this.page = page;
+        }
+    }
+
+    // 头节点
+    LinkedNode head;
+    // 尾节点
+    LinkedNode tail;
+
+    private void addToHead(LinkedNode node) {
+        node.prev = this.head;
+        node.next = this.head.next;
+        this.head.next.prev = node;
+        this.head.next = node;
+    }
+
+    private void remove(LinkedNode node) {
+        node.prev.next = node.next;
+        node.next.prev = node.prev;
+    }
+
+    private void moveToHead(LinkedNode node) {
+        remove(node);
+        addToHead(node);
+    }
+
+    private LinkedNode removeTail() {
+        LinkedNode node = this.tail.prev;
+        remove(node);
+        return node;
+    }
+
 
     /**
      * Creates a BufferPool that caches up to numPages pages.
@@ -48,7 +92,11 @@ public class BufferPool {
     public BufferPool(int numPages) {
         // some code goes here
         this.numPages = numPages;
-        this.pageStore = new ConcurrentHashMap<Integer, Page>();
+        this.pageStore = new ConcurrentHashMap<>();
+        this.head = new LinkedNode(new HeapPageId(-1, -1), null);
+        this.tail = new LinkedNode(new HeapPageId(-1, -1), null);
+        this.head.next = this.tail;
+        this.tail.prev = this.head;
     }
 
     public static int getPageSize() {
@@ -76,20 +124,33 @@ public class BufferPool {
      * space in the buffer pool, a page should be evicted and the new page
      * should be added in its place.
      *
-     * @param tid  the ID of the transaction requesting the page
-     * @param pid  the ID of the requested page
+     * @param tid the ID of the transaction requesting the page
+     * @param pid the ID of the requested page
      * @param perm the requested permissions on the page
      */
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // some code goes here
-        // 在BufferPool中获取曾读写过的缓存页
-        if (!pageStore.containsKey(pid.hashCode())) {
+        // 如果缓存池中没有
+        if (!this.pageStore.containsKey(pid)) {
+            // 获取
             DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
             Page page = dbFile.readPage(pid);
-            pageStore.put(pid.hashCode(), page);
+            // 是否超过大小
+            if (this.pageStore.size() >= this.numPages) {
+                // 淘汰 (后面的 lab 书写)
+                eviction();
+            }
+            LinkedNode node = new LinkedNode(pid, page);
+            // 放入缓存
+            this.pageStore.put(pid, node);
+            // 插入头节点
+            addToHead(node);
         }
-        return pageStore.get(pid.hashCode());
+        // 移动到头部
+        moveToHead(this.pageStore.get(pid));
+        // 从 缓存池 中获取
+        return this.pageStore.get(pid).page;
     }
 
     /**
@@ -142,20 +203,24 @@ public class BufferPool {
      * acquire a write lock on the page the tuple is added to and any other
      * pages that are updated (Lock acquisition is not needed for lab2).
      * May block if the lock(s) cannot be acquired.
-     * <p>
+     *
      * Marks any pages that were dirtied by the operation as dirty by calling
      * their markDirty bit, and adds versions of any pages that have
      * been dirtied to the cache (replacing any existing versions of those pages) so
      * that future requests see up-to-date pages.
      *
-     * @param tid     the transaction adding the tuple
+     * @param tid the transaction adding the tuple
      * @param tableId the table to add the tuple to
-     * @param t       the tuple to add
+     * @param t the tuple to add
      */
     public void insertTuple(TransactionId tid, int tableId, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        // 获取 数据库文件 DBfile
+        HeapFile heapFile = (HeapFile) Database.getCatalog().getDatabaseFile(tableId);
+        // 将页面刷新到缓存中
+        updateBufferPoll(heapFile.insertTuple(tid, t), tid);
     }
 
     /**
@@ -175,6 +240,45 @@ public class BufferPool {
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        // 查询所属表对应的文件
+        HeapFile heapFile = (HeapFile) Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
+        // 将页面刷新到缓存中
+        updateBufferPoll(heapFile.deleteTuple(tid, t), tid);
+    }
+
+    /**
+     * 更新缓存
+     *
+     * @param pageList 需要更新的页面
+     * @param tid      事务id
+     */
+    private void updateBufferPoll(List<Page> pageList, TransactionId tid) {
+        for (Page page : pageList) {
+            page.markDirty(true, tid);
+            // 如果缓存池已满，执行淘汰策略
+            if (this.pageStore.size() > this.numPages) {
+                eviction();
+            }
+            // 获取节点，此时的页一定已经在缓存了，因为刚刚被修改的时候就已经放入缓存了
+            LinkedNode node = this.pageStore.get(page.getId());
+            if (node != null) {
+                // 更新新的页内容
+                node.page = page;
+                // 更新到缓存
+                this.pageStore.put(page.getId(), node);
+            }
+        }
+    }
+
+    /**
+     * 淘汰策略
+     * 使用 LRU 算法进行淘汰最近最久未使用
+     */
+    private void eviction() {
+        // 淘汰尾部节点
+        LinkedNode node = removeTail();
+        // 移除缓存中的记录
+        this.pageStore.remove(node.pageId);
     }
 
     /**
@@ -185,7 +289,9 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
-
+        for (PageId pageId : this.pageStore.keySet()) {
+            flushPage(pageId);
+        }
     }
 
     /**
@@ -197,9 +303,13 @@ public class BufferPool {
      * Also used by B+ tree files to ensure that deleted pages
      * are removed from the cache so they can be reused safely
      */
-    public synchronized void discardPage(PageId pid) {
+    public synchronized void discardPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+        // 删除使用记录
+        remove(this.pageStore.get(pid));
+        // 删除缓存
+        this.pageStore.remove(pid);
     }
 
     /**
@@ -210,6 +320,14 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+        Page page = this.pageStore.get(pid).page;
+        // 如果是是脏页
+        if (page.isDirty() != null) {
+            // 写入脏页
+            Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(page);
+            // 移除脏页标签 和 事务标签
+            page.markDirty(false, null);
+        }
     }
 
     /**
@@ -228,5 +346,4 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
     }
-
 }

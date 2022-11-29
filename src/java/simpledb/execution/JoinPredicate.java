@@ -11,10 +11,13 @@ import java.io.Serializable;
 public class JoinPredicate implements Serializable {
 
     private static final long serialVersionUID = 1L;
-
+    // 字段一索引下标
     private final int field1;
-    private final int field2;
+    // 比较符号
     private final Predicate.Op op;
+    // 字段二索引下标
+    private final int field2;
+
 
     /**
      * Constructor -- create a new predicate over two fields of two tuples.
@@ -26,14 +29,12 @@ public class JoinPredicate implements Serializable {
      *               Predicate.Op.EQUAL, Predicate.Op.GREATER_THAN_OR_EQ, or
      *               Predicate.Op.LESS_THAN_OR_EQ
      * @see Predicate
-     * <p>
-     * 双向元组比较
      */
     public JoinPredicate(int field1, Predicate.Op op, int field2) {
         // some code goes here
         this.field1 = field1;
-        this.field2 = field2;
         this.op = op;
+        this.field2 = field2;
     }
 
     /**
@@ -62,3 +63,4 @@ public class JoinPredicate implements Serializable {
         return this.op;
     }
 }
+

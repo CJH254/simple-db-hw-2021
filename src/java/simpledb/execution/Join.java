@@ -13,9 +13,13 @@ import java.util.NoSuchElementException;
 public class Join extends Operator {
 
     private static final long serialVersionUID = 1L;
-    private JoinPredicate p;
+    // 双元组比较
+    private final JoinPredicate joinPredicate;
+    // 元组迭代器1
     private OpIterator child1;
+    // 元组迭代器2
     private OpIterator child2;
+    // 临时元组，保存上次迭代用的 child1 的 Tuple
     private Tuple t;
 
     /**
@@ -31,15 +35,14 @@ public class Join extends Operator {
      */
     public Join(JoinPredicate p, OpIterator child1, OpIterator child2) {
         // some code goes here
-        this.p = p;
+        this.joinPredicate = p;
         this.child1 = child1;
         this.child2 = child2;
-        this.t = null;
     }
 
     public JoinPredicate getJoinPredicate() {
         // some code goes here
-        return this.p;
+        return this.joinPredicate;
     }
 
     /**
@@ -49,7 +52,7 @@ public class Join extends Operator {
      * */
     public String getJoinField1Name() {
         // some code goes here
-        return this.child1.getTupleDesc().getFieldName(this.p.getField1());
+        return this.child1.getTupleDesc().getFieldName(this.joinPredicate.getField1());
     }
 
     /**
@@ -59,7 +62,7 @@ public class Join extends Operator {
      * */
     public String getJoinField2Name() {
         // some code goes here
-        return this.child2.getTupleDesc().getFieldName(this.p.getField2());
+        return this.child2.getTupleDesc().getFieldName(this.joinPredicate.getField2());
     }
 
     /**
@@ -87,6 +90,7 @@ public class Join extends Operator {
         super.close();
         this.child2.close();
         this.child1.close();
+
     }
 
     @Override
@@ -94,6 +98,7 @@ public class Join extends Operator {
         // some code goes here
         this.child1.rewind();
         this.child2.rewind();
+        this.t = null;
     }
 
     /**
@@ -110,32 +115,38 @@ public class Join extends Operator {
      * <p>
      * For example, if one tuple is {1,2,3} and the other tuple is {1,5,6},
      * joined on equality of the first column, then this returns {1,2,3,1,5,6}.
-     * 
+     *
      * @return The next matching tuple.
      * @see JoinPredicate#filter
      */
     @Override
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
+        // t 的意义就是 笛卡尔积, 一个可能对多个相等
         while (this.child1.hasNext() || this.t != null) {
             if (this.child1.hasNext() && this.t == null) {
                 this.t = this.child1.next();
             }
             while (this.child2.hasNext()) {
                 Tuple t2 = this.child2.next();
-                if (this.p.filter(this.t, t2)) {
+                if (this.joinPredicate.filter(this.t, t2)) {
                     TupleDesc td1 = this.t.getTupleDesc();
                     TupleDesc td2 = t2.getTupleDesc();
-                    TupleDesc newTd = TupleDesc.merge(td1, td2);
-                    Tuple newTuple = new Tuple(newTd);
+                    // 合并
+                    TupleDesc tupleDesc = TupleDesc.merge(td1, td2);
+                    // 创建新的行
+                    Tuple newTuple = new Tuple(tupleDesc);
+                    // 设置路径
                     newTuple.setRecordId(this.t.getRecordId());
+                    // 合并
                     int i = 0;
-                    for (; i < td1.numFields(); ++i) {
+                    for (; i < td1.numFields(); i++) {
                         newTuple.setField(i, this.t.getField(i));
                     }
-                    for (int j = 0; j < td2.numFields(); ++j) {
+                    for (int j = 0; j < td2.numFields(); j++) {
                         newTuple.setField(i + j, t2.getField(j));
                     }
+                    // 遍历完t2后重置，t置空，准备遍历下一个
                     if (!this.child2.hasNext()) {
                         this.child2.rewind();
                         this.t = null;
@@ -143,6 +154,7 @@ public class Join extends Operator {
                     return newTuple;
                 }
             }
+            // 重置 child2
             this.child2.rewind();
             this.t = null;
         }

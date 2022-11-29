@@ -8,7 +8,6 @@ import simpledb.transaction.TransactionId;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
 import java.util.NoSuchElementException;
 
 /**
@@ -20,16 +19,19 @@ import java.util.NoSuchElementException;
  */
 public class HeapPage implements Page {
 
-    // HeapPageId来定位该Page属于哪张表，在表中的序号
-    final HeapPageId pid;
-    // 每个数据页存储的都是同一张表，即表头信息都是一样的
-    final TupleDesc td;
-    // 数据页头部，使用bitmap保存各个slot的占用情况
-    final byte[] header;
-    // 具体的记录:数据
-    final Tuple[] tuples;
-    // slot存储记录:即该数据页Page存储的记录数
-    final int numSlots;
+    private final HeapPageId pid;
+    private final TupleDesc td;
+    // 槽储存
+    private final byte[] header;
+    // 元组数据
+    private final Tuple[] tuples;
+    // 槽数
+    private final int numSlots;
+
+    // 事务 id
+    private TransactionId tid;
+    // 是否是脏页
+    private boolean dirty;
 
     byte[] oldData;
     private final Byte oldDataLock = (byte) 0;
@@ -58,12 +60,12 @@ public class HeapPage implements Page {
         DataInputStream dis = new DataInputStream(new ByteArrayInputStream(data));
 
         // allocate and read the header slots of this page
+        // 处理头部
         this.header = new byte[getHeaderSize()];
         for (int i = 0; i < this.header.length; i++) {
-            byte b = dis.readByte();
-            this.header[i] = b;
+            this.header[i] = dis.readByte();
         }
-
+        // 处理每行
         this.tuples = new Tuple[this.numSlots];
         try {
             // allocate and read the actual records of this page
@@ -82,26 +84,23 @@ public class HeapPage implements Page {
      * Retrieve the number of tuples on this page.
      *
      * @return the number of tuples on this page
-     *
-     * 一页Page能够存储的元组Tuple和头部Header「该元组使用情况」的数量
      */
     private int getNumTuples() {
         // some code goes here
-        //_tuples per page_ = floor((_page size_ * 8) / (_tuple size_ * 8 + 1))
-        int num = (int) Math.floor((BufferPool.getPageSize() * 8 * 1.0) / (this.td.getSize() * 8 + 1));
-        return num;
+        // 计算页面有多少个元组
+        // tuple_nums = floor((page_size * 8) / tuple_size * 8 + 1)
+        return (int) Math.floor((BufferPool.getPageSize() * 8 * 1.0) / (this.td.getSize() * 8 + 1));
+
     }
 
     /**
      * Computes the number of bytes in the header of a page in a HeapFile with each tuple occupying tupleSize bytes
      *
      * @return the number of bytes in the header of a page in a HeapFile with each tuple occupying tupleSize bytes
-     *
-     * Header Size必须向上取整，给多出来的数据分配完整的内存空间
      */
     private int getHeaderSize() {
         // some code goes here
-        // headerBytes = ceiling(tupsPerPage/8)
+        // headerBytes = ceiling(tuplePerPage / 8);
         return (int) Math.ceil(getNumTuples() * 1.0 / 8);
     }
 
@@ -273,19 +272,55 @@ public class HeapPage implements Page {
     public void deleteTuple(Tuple t) throws DbException {
         // some code goes here
         // not necessary for lab1
+        // 查看属性是否匹配
+        int tupleId = t.getRecordId().getTupleNumber();
+        // 页面已被删除， 类型不相同， 页面不相同
+        if (this.tuples[tupleId] == null || !t.getTupleDesc().equals(this.td) || !t.getRecordId().getPageId().equals(this.pid)) {
+            throw new DbException("this tuple is not on this page");
+        }
+        if (!isSlotUsed(tupleId)) {
+            throw new DbException("tuple slot is already empty");
+        }
+        // 标记未被使用
+        markSlotUsed(tupleId, false);
+        // 删除插槽内容
+        this.tuples[tupleId] = null;
     }
 
     /**
      * Adds the specified tuple to the page;  the tuple should be updated to reflect
-     * that it is now stored on this page.
-     *
-     * @param t The tuple to add.
+     *  that it is now stored on this page.
      * @throws DbException if the page is full (no empty slots) or tupledesc
-     *                     is mismatch.
+     *         is mismatch.
+     * @param t The tuple to add.
      */
     public void insertTuple(Tuple t) throws DbException {
         // some code goes here
         // not necessary for lab1
+        // 查看 Page 是否已满
+        if (getNumEmptySlots() == 0) {
+            throw new DbException("当前页已满");
+        }
+
+        // 查看属性是否匹配
+        if (!t.getTupleDesc().equals(this.td)) {
+            throw new DbException("类型不匹配");
+        }
+
+        // 查询 tuple
+        for (int i = 0; i < this.numSlots; i++) {
+            // 查看未被使用的槽
+            if (!isSlotUsed(i)) {
+                // 标记使用
+                markSlotUsed(i, true);
+                // 设置路径
+                t.setRecordId(new RecordId(this.pid, i));
+                // 放入槽位
+                this.tuples[i] = t;
+                return;
+            }
+        }
+
     }
 
     /**
@@ -296,6 +331,8 @@ public class HeapPage implements Page {
     public void markDirty(boolean dirty, TransactionId tid) {
         // some code goes here
         // not necessary for lab1
+        this.dirty = dirty;
+        this.tid = tid;
     }
 
     /**
@@ -305,41 +342,39 @@ public class HeapPage implements Page {
     public TransactionId isDirty() {
         // some code goes here
         // Not necessary for lab1
+        if (this.dirty) {
+            return this.tid;
+        }
         return null;
     }
 
     /**
      * Returns the number of empty slots on this page.
-     * <p>
-     * header数组中没使用的情况
      */
     public int getNumEmptySlots() {
         // some code goes here
-        int cnt = 0;
-        for (int i = 0; i < this.numSlots; ++i) {
+        int count = 0;
+        for (int i = 0; i < this.numSlots; i++) {
             if (!isSlotUsed(i)) {
-                ++cnt;
+                count++;
             }
         }
-        return cnt;
+        return count;
     }
 
     /**
      * Returns true if associated slot on this page is filled.
-     * <p>
-     * header数组的一个位表示一个元组的使用情况
      */
     public boolean isSlotUsed(int i) {
         // some code goes here
-        // use bitmap
-        if (i > numSlots) {
-            return false;
-        }
-        //index即指第i页Page
-        int index = i / 8;
-        int offset = i % 8;
-        //每一位就代表一个page，每一个page有8位，所以需要除以8位。
-        return (this.header[index] & (1 << offset)) != 0;
+        // 槽位
+        int quot = i / 8;
+        // 偏移
+        int move = i % 8;
+        // 获得对应的槽位
+        int bitidx = this.header[quot];
+        // 偏移 move 位，看是否等于 1
+        return ((bitidx >> move) & 1) == 1;
     }
 
     /**
@@ -348,24 +383,37 @@ public class HeapPage implements Page {
     private void markSlotUsed(int i, boolean value) {
         // some code goes here
         // not necessary for lab1
+        // 找到槽位
+        int slot = i / 8;
+        // 偏移
+        int move = i % 8;
+        // 掩码
+        byte mask = (byte) (1 << move);
+        // 更新槽位
+        if (value) {
+            // 标记已被使用，更新 0 为 1
+            this.header[slot] |= mask;
+        } else {
+            // 标记为未被使用，更新 1 为 0
+            // 除了该位其他位都是 1 的掩码，也就是该位会与 0 运算, 从而置零
+            this.header[slot] &= ~mask;
+        }
     }
 
     /**
      * @return an iterator over all tuples on this page (calling remove on this iterator throws an UnsupportedOperationException)
      * (note that this iterator shouldn't return tuples in empty slots!)
-     *
-     * 返回迭代器，里面的元素都是该页使用的Tuple集合
      */
     public Iterator<Tuple> iterator() {
         // some code goes here
-        List<Tuple> filledTuples = new ArrayList<Tuple>();
-        for (int i = 0; i < this.numSlots; ++i) {
+        // 获取已使用的槽对应的数
+        ArrayList<Tuple> res = new ArrayList<>();
+        for (int i = 0; i < this.numSlots; i++) {
             if (isSlotUsed(i)) {
-                filledTuples.add(this.tuples[i]);
+                res.add(this.tuples[i]);
             }
         }
-        return filledTuples.iterator();
+        return res.iterator();
     }
 
 }
-

@@ -19,7 +19,7 @@ public class Predicate implements Serializable {
         /**
          * Interface to access operations by integer value for command-line
          * convenience.
-         * 
+         *
          * @param i
          *            a valid integer Op index
          */
@@ -55,8 +55,11 @@ public class Predicate implements Serializable {
 
     }
 
-    private int fieldNo;
-    private Op op;
+    // 比较的字段
+    private final int field;
+    // 比较符号
+    private final Op op;
+    // 元组传递进来的比较字段
     private Field operand;
 
     /**
@@ -68,18 +71,17 @@ public class Predicate implements Serializable {
      */
     public Predicate(int field, Op op, Field operand) {
         // some code goes here
-        this.fieldNo = field;
+        this.field = field;
         this.op = op;
         this.operand = operand;
     }
-
 
     /**
      * @return the field number
      */
     public int getFieldNo() {
         // some code goes here
-        return this.fieldNo;
+        return this.field;
     }
 
     /**
@@ -90,7 +92,7 @@ public class Predicate implements Serializable {
         // some code goes here
         return this.op;
     }
-    
+
     /**
      * @return the operand
      */
@@ -108,13 +110,11 @@ public class Predicate implements Serializable {
      *
      * @param t The tuple to compare against
      * @return true if the comparison is true, false otherwise.
-     * <p>
-     * 获取元组的第fieldNo个字段的值，用op操作符与operand操作数进行比较
      */
     public boolean filter(Tuple t) {
         // some code goes here
-        Field field = t.getField(this.fieldNo);
-        return field.compare(this.op, this.operand);
+        // 获取字段，传入比较符号，和当前 Field比较
+        return t.getField(this.field).compare(this.op, this.operand);
     }
 
     /**
@@ -124,7 +124,7 @@ public class Predicate implements Serializable {
     @Override
     public String toString() {
         // some code goes here
-        String s = String.format("f = %d op = %s operand = %s", this.fieldNo, this.op.toString(), this.operand.toString());
-        return s;
+        return "f = " + this.field + " op = " + this.op.toString() + " operand = " + this.operand.toString();
     }
 }
+

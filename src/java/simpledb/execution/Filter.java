@@ -13,9 +13,8 @@ import java.util.NoSuchElementException;
 public class Filter extends Operator {
 
     private static final long serialVersionUID = 1L;
-    // 通过Predicate接口接受单向或双向比较操作
-    private final Predicate p;
-    // 通过迭代器遍历筛选出符合Predicate数据
+
+    private final Predicate predicate;
     private OpIterator child;
 
     /**
@@ -27,13 +26,13 @@ public class Filter extends Operator {
      */
     public Filter(Predicate p, OpIterator child) {
         // some code goes here
-        this.p = p;
+        this.predicate = p;
         this.child = child;
     }
 
     public Predicate getPredicate() {
         // some code goes here
-        return this.p;
+        return this.predicate;
     }
 
     @Override
@@ -52,9 +51,9 @@ public class Filter extends Operator {
 
     @Override
     public void close() {
-        // some code goes here
         super.close();
         this.child.close();
+        // some code goes here
     }
 
     @Override
@@ -67,7 +66,7 @@ public class Filter extends Operator {
      * AbstractDbIterator.readNext implementation. Iterates over tuples from the
      * child operator, applying the predicate to them and returning those that
      * pass the predicate (i.e. for which the Predicate.filter() returns true.)
-     * 
+     *
      * @return The next tuple that passes the filter, or null if there are no
      *         more tuples
      * @see Predicate#filter
@@ -77,9 +76,9 @@ public class Filter extends Operator {
             TransactionAbortedException, DbException {
         // some code goes here
         while (this.child.hasNext()) {
-            Tuple t = this.child.next();
-            if (this.p.filter(t)) {
-                return t;
+            Tuple tuple = this.child.next();
+            if (this.predicate.filter(tuple)) {
+                return tuple;
             }
         }
         return null;
